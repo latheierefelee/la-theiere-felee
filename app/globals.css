@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --blanc-casse: #f8f8f8;
+    --creme: #fcfcfc;
+    --noir-anthracite: #2c2c2c;
+    --gris-fonce: #3a3a3a;
+    --kraft: #b89c7e;
+    --kraft-clair: #c9b29b;
+  }
+
+  body {
+    @apply bg-blanc-casse text-noir-anthracite;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-block border border-noir-anthracite bg-creme px-10 py-3 font-serif text-sm uppercase tracking-widest text-noir-anthracite transition-all hover:bg-noir-anthracite hover:text-creme;
+  }
+
+  .btn-secondary {
+    @apply inline-block border border-kraft bg-transparent px-8 py-3 font-sans text-sm tracking-wide text-noir-anthracite transition-all hover:bg-kraft hover:text-creme;
+  }
+
+  .section-title {
+    @apply font-cursive text-5xl text-noir-anthracite;
+  }
+
+  .product-title {
+    @apply font-serif text-2xl font-semibold uppercase tracking-wider text-noir-anthracite;
+  }
+}

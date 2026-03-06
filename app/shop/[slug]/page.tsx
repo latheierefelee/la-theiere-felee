@@ -16,7 +16,7 @@ const products = {
     name: "NYMPHÉAS",
     price: 18.5,
     image: "/images/products/nympheas.jpg",
-    description: "L’esprit de Giverny dans une fiole. Laissez-vous transporter au bord de l’étang de Claude Monet. Ce mélange exclusif, baptisé Nymphéas, célèbre la sérénité des jardins d'eau. Alliant la fraîcheur iodée des algues à la vivacité du citron vert, il offre une expérience "ambiance littorale" unique. Une infusion cristalline et apaisante, parfaite pour un moment de contemplation hors du temps.",
+    description: "L’esprit de Giverny dans une fiole. Laissez-vous transporter au bord de l’étang de Claude Monet. Ce mélange exclusif, baptisé Nymphéas, célèbre la sérénité des jardins d'eau. Alliant la fraîcheur iodée des algues à la vivacité du citron vert, il offre une expérience ambiance littorale unique. Une infusion cristalline et apaisante, parfaite pour un moment de contemplation hors du temps.",
     ingredients: ["Thé vert Sencha", "Fleurs de jasmin", "Pétales de rose", "Arôme naturel de fleur de lotus"],
     brewing: {
       temperature: "75-80°C",

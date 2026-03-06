@@ -12,7 +12,6 @@ import { useCart } from '@/lib/contexts/CartContext'
 import Link from 'next/link'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY as string)
-console.log('Stripe key:', process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
 
 // ─── Formulaire de paiement ───────────────────────────────────────────────────
 interface DeliveryInfo {
@@ -107,7 +106,10 @@ export default function CheckoutPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         amount: cart.total,
-        items: cart.items.map((i) => ({ name: i.name, quantity: i.quantity })),
+        items: cart.items.map((i) => ({
+          name: i.product.name,
+          quantity: i.quantity,
+        })),
       }),
     })
       .then((res) => res.json())
@@ -162,8 +164,8 @@ export default function CheckoutPage() {
               <button
                 onClick={() => setStep('delivery')}
                 className={`tracking-widest uppercase transition-colors ${step === 'delivery'
-                  ? 'text-[#2C2C2C] font-semibold'
-                  : 'text-[#B89C7E]'
+                    ? 'text-[#2C2C2C] font-semibold'
+                    : 'text-[#B89C7E]'
                   }`}
               >
                 1. Livraison
@@ -171,8 +173,8 @@ export default function CheckoutPage() {
               <div className="w-8 h-px bg-[#B89C7E]" />
               <span
                 className={`tracking-widest uppercase transition-colors ${step === 'payment'
-                  ? 'text-[#2C2C2C] font-semibold'
-                  : 'text-[#B89C7E]'
+                    ? 'text-[#2C2C2C] font-semibold'
+                    : 'text-[#B89C7E]'
                   }`}
               >
                 2. Paiement
@@ -327,17 +329,17 @@ export default function CheckoutPage() {
 
             <div className="space-y-4 mb-6">
               {cart.items.map((item) => (
-                <div key={item.id} className="flex justify-between items-start">
+                <div key={item.productId} className="flex justify-between items-start">
                   <div>
                     <p className="font-serif text-sm text-[#2C2C2C] uppercase tracking-wider">
-                      {item.name}
+                      {item.product.name}
                     </p>
                     <p className="font-sans text-xs text-[#B89C7E] mt-0.5">
                       Qté : {item.quantity}
                     </p>
                   </div>
                   <span className="font-sans text-sm text-[#2C2C2C]">
-                    {(item.price * item.quantity).toFixed(2)} €
+                    {(item.product.price * item.quantity).toFixed(2)} €
                   </span>
                 </div>
               ))}

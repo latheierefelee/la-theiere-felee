@@ -16,7 +16,7 @@ const products = {
     name: "NYMPHÉAS",
     price: 18.5,
     image: "/images/products/nympheas.jpg",
-    description: "Thé vert délicat aux notes florales, inspiré des jardins de Giverny de Claude Monet. Un mélange raffiné qui évoque la sérénité des nymphéas flottant sur l'eau.",
+    description: "L’esprit de Giverny dans une fiole. Laissez-vous transporter au bord de l’étang de Claude Monet. Ce mélange exclusif, baptisé Nymphéas, célèbre la sérénité des jardins d'eau. Alliant la fraîcheur iodée des algues à la vivacité du citron vert, il offre une expérience "ambiance littorale" unique. Une infusion cristalline et apaisante, parfaite pour un moment de contemplation hors du temps.",
     ingredients: ["Thé vert Sencha", "Fleurs de jasmin", "Pétales de rose", "Arôme naturel de fleur de lotus"],
     brewing: {
       temperature: "75-80°C",
@@ -78,9 +78,9 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
       createdAt: new Date(),
       updatedAt: new Date(),
     }, quantity);
-    
+
     showToast(`${quantity} ${product.name} ajouté${quantity > 1 ? 's' : ''} au panier`);
-    
+
     setTimeout(() => {
       setIsAdding(false);
       setQuantity(1);
@@ -173,9 +173,9 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                 </div>
               </div>
 
-              <Button 
-                variant="primary" 
-                className="w-full" 
+              <Button
+                variant="primary"
+                className="w-full"
                 onClick={handleAddToCart}
                 disabled={isAdding}
               >

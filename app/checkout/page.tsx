@@ -13,7 +13,7 @@ export default function CheckoutPage() {
   const { cart, clearCart } = useCart();
   const { showToast } = useToast();
   const router = useRouter();
-  
+
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",

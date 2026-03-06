@@ -1,224 +1,377 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Button } from "@/components/ui/Button";
-import { useCart } from "@/lib/contexts/CartContext";
-import { useToast } from "@/lib/contexts/ToastContext";
-import { formatPrice } from "@/lib/utils";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from 'react'
+import { loadStripe } from '@stripe/stripe-js'
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from '@stripe/react-stripe-js'
+import { useCart } from '@/lib/contexts/CartContext'
+import Link from 'next/link'
 
-export default function CheckoutPage() {
-  const { cart, clearCart } = useCart();
-  const { showToast } = useToast();
-  const router = useRouter();
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY as string)
+console.log('Stripe key:', process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
 
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    address: "",
-    city: "",
-    postalCode: "",
-    country: "France",
-  });
+// ─── Formulaire de paiement ───────────────────────────────────────────────────
+interface DeliveryInfo {
+  firstName: string
+  lastName: string
+  email: string
+  address: string
+  city: string
+  postal: string
+}
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+function CheckoutForm({ deliveryInfo }: { deliveryInfo: DeliveryInfo }) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Commande passée :", formData);
-    showToast("Commande passée avec succès ! Merci pour votre confiance ✨");
-    clearCart();
-    setTimeout(() => {
-      router.push("/");
-    }, 2000);
-  };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!stripe || !elements) return
 
-  if (cart.items.length === 0) {
-    router.push("/cart");
-    return null;
+    setLoading(true)
+    setError('')
+
+    const { error: stripeError } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/checkout/success`,
+        payment_method_data: {
+          billing_details: {
+            name: `${deliveryInfo.firstName} ${deliveryInfo.lastName}`,
+            email: deliveryInfo.email,
+            address: {
+              line1: deliveryInfo.address,
+              city: deliveryInfo.city,
+              postal_code: deliveryInfo.postal,
+              country: 'FR',
+            },
+          },
+        },
+      },
+    })
+
+    if (stripeError) {
+      setError(stripeError.message || 'Une erreur est survenue.')
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-blanc-casse">
-      <Header />
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <PaymentElement options={{ layout: 'tabs' }} />
 
-      <main className="py-12">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h1 className="mb-8 font-serif text-4xl font-light text-noir-anthracite">
-            Finaliser ma commande
+      {error && (
+        <p className="text-sm text-red-600 border border-red-200 p-3">
+          {error}
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={!stripe || loading}
+        className="w-full bg-[#2C2C2C] text-white py-4 font-sans text-sm tracking-widest uppercase hover:bg-[#3A3A3A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {loading ? 'Traitement en cours...' : 'Confirmer & Payer'}
+      </button>
+    </form>
+  )
+}
+
+// ─── Page principale ──────────────────────────────────────────────────────────
+export default function CheckoutPage() {
+  const { cart, clearCart } = useCart()
+
+  const [clientSecret, setClientSecret] = useState('')
+  const [step, setStep] = useState<'delivery' | 'payment'>('delivery')
+  const [deliveryInfo, setDeliveryInfo] = useState<DeliveryInfo>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    address: '',
+    city: '',
+    postal: '',
+  })
+  const [deliveryError, setDeliveryError] = useState('')
+
+  useEffect(() => {
+    if (cart.items.length === 0) return
+
+    fetch('/api/create-payment-intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: cart.total,
+        items: cart.items.map((i) => ({ name: i.name, quantity: i.quantity })),
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => setClientSecret(data.clientSecret))
+      .catch((err) => console.error('Erreur payment intent:', err))
+  }, [cart.total, cart.items])
+
+  const handleDeliverySubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const { firstName, lastName, email, address, city, postal } = deliveryInfo
+    if (!firstName || !lastName || !email || !address || !city || !postal) {
+      setDeliveryError('Merci de remplir tous les champs.')
+      return
+    }
+    setDeliveryError('')
+    setStep('payment')
+  }
+
+  if (cart.items.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#F8F8F8] flex flex-col items-center justify-center gap-6">
+        <p className="font-serif text-2xl text-[#2C2C2C]">Votre panier est vide</p>
+        <Link
+          href="/shop"
+          className="text-sm font-sans tracking-widest uppercase underline underline-offset-4 text-[#2C2C2C]"
+        >
+          Découvrir la collection
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F8F8F8] py-16">
+      <div className="max-w-5xl mx-auto px-6">
+
+        {/* Titre */}
+        <div className="text-center mb-12">
+          <h1 className="font-serif text-4xl text-[#2C2C2C] uppercase tracking-widest mb-2">
+            Finaliser la commande
           </h1>
+          <div className="w-16 h-px bg-[#B89C7E] mx-auto" />
+        </div>
 
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="border border-gris-fonce/10 bg-creme p-6">
-                  <h2 className="mb-6 font-serif text-2xl font-semibold text-noir-anthracite">
-                    Informations de livraison
-                  </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
 
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block font-sans text-sm font-semibold text-noir-anthracite">
-                        Prénom *
-                      </label>
-                      <input
-                        type="text"
-                        name="firstName"
-                        value={formData.firstName}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gris-fonce/20 bg-blanc-casse px-4 py-3 font-sans text-sm focus:border-kraft focus:outline-none"
-                      />
-                    </div>
+          {/* Colonne gauche */}
+          <div className="space-y-8">
 
-                    <div>
-                      <label className="mb-2 block font-sans text-sm font-semibold text-noir-anthracite">
-                        Nom *
-                      </label>
-                      <input
-                        type="text"
-                        name="lastName"
-                        value={formData.lastName}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gris-fonce/20 bg-blanc-casse px-4 py-3 font-sans text-sm focus:border-kraft focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block font-sans text-sm font-semibold text-noir-anthracite">
-                        Email *
-                      </label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gris-fonce/20 bg-blanc-casse px-4 py-3 font-sans text-sm focus:border-kraft focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block font-sans text-sm font-semibold text-noir-anthracite">
-                        Téléphone *
-                      </label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gris-fonce/20 bg-blanc-casse px-4 py-3 font-sans text-sm focus:border-kraft focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="mb-2 block font-sans text-sm font-semibold text-noir-anthracite">
-                        Adresse *
-                      </label>
-                      <input
-                        type="text"
-                        name="address"
-                        value={formData.address}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gris-fonce/20 bg-blanc-casse px-4 py-3 font-sans text-sm focus:border-kraft focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block font-sans text-sm font-semibold text-noir-anthracite">
-                        Ville *
-                      </label>
-                      <input
-                        type="text"
-                        name="city"
-                        value={formData.city}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gris-fonce/20 bg-blanc-casse px-4 py-3 font-sans text-sm focus:border-kraft focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block font-sans text-sm font-semibold text-noir-anthracite">
-                        Code postal *
-                      </label>
-                      <input
-                        type="text"
-                        name="postalCode"
-                        value={formData.postalCode}
-                        onChange={handleChange}
-                        required
-                        className="w-full border border-gris-fonce/20 bg-blanc-casse px-4 py-3 font-sans text-sm focus:border-kraft focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <Button type="submit" variant="primary" className="w-full">
-                  Valider ma commande
-                </Button>
-              </form>
+            {/* Étapes */}
+            <div className="flex items-center gap-4 text-sm font-sans">
+              <button
+                onClick={() => setStep('delivery')}
+                className={`tracking-widest uppercase transition-colors ${step === 'delivery'
+                  ? 'text-[#2C2C2C] font-semibold'
+                  : 'text-[#B89C7E]'
+                  }`}
+              >
+                1. Livraison
+              </button>
+              <div className="w-8 h-px bg-[#B89C7E]" />
+              <span
+                className={`tracking-widest uppercase transition-colors ${step === 'payment'
+                  ? 'text-[#2C2C2C] font-semibold'
+                  : 'text-[#B89C7E]'
+                  }`}
+              >
+                2. Paiement
+              </span>
             </div>
 
-            <div className="lg:col-span-1">
-              <div className="border border-gris-fonce/10 bg-creme p-6">
-                <h2 className="mb-6 font-serif text-2xl font-semibold text-noir-anthracite">
-                  Résumé
-                </h2>
-
-                <div className="space-y-4">
-                  {cart.items.map((item) => (
-                    <div key={item.productId} className="flex justify-between text-sm">
-                      <span className="font-sans text-gris-fonce">
-                        {item.product.name} x {item.quantity}
-                      </span>
-                      <span className="font-sans text-noir-anthracite">
-                        {formatPrice(item.product.price * item.quantity)}
-                      </span>
-                    </div>
-                  ))}
+            {/* Formulaire livraison */}
+            {step === 'delivery' && (
+              <form onSubmit={handleDeliverySubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-sans tracking-widest uppercase text-[#3A3A3A] mb-1">
+                      Prénom
+                    </label>
+                    <input
+                      type="text"
+                      value={deliveryInfo.firstName}
+                      onChange={(e) =>
+                        setDeliveryInfo({ ...deliveryInfo, firstName: e.target.value })
+                      }
+                      className="w-full border border-[#2C2C2C] bg-white px-4 py-3 font-sans text-sm text-[#2C2C2C] focus:outline-none focus:border-[#B89C7E]"
+                      placeholder="Marie"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-sans tracking-widest uppercase text-[#3A3A3A] mb-1">
+                      Nom
+                    </label>
+                    <input
+                      type="text"
+                      value={deliveryInfo.lastName}
+                      onChange={(e) =>
+                        setDeliveryInfo({ ...deliveryInfo, lastName: e.target.value })
+                      }
+                      className="w-full border border-[#2C2C2C] bg-white px-4 py-3 font-sans text-sm text-[#2C2C2C] focus:outline-none focus:border-[#B89C7E]"
+                      placeholder="Dupont"
+                    />
+                  </div>
                 </div>
 
-                <div className="mt-6 space-y-4 border-t border-gris-fonce/10 pt-4">
-                  <div className="flex justify-between font-sans text-sm">
-                    <span className="text-gris-fonce">Sous-total</span>
-                    <span className="text-noir-anthracite">
-                      {formatPrice(cart.subtotal)}
-                    </span>
+                <div>
+                  <label className="block text-xs font-sans tracking-widest uppercase text-[#3A3A3A] mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={deliveryInfo.email}
+                    onChange={(e) =>
+                      setDeliveryInfo({ ...deliveryInfo, email: e.target.value })
+                    }
+                    className="w-full border border-[#2C2C2C] bg-white px-4 py-3 font-sans text-sm text-[#2C2C2C] focus:outline-none focus:border-[#B89C7E]"
+                    placeholder="marie@exemple.fr"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-sans tracking-widest uppercase text-[#3A3A3A] mb-1">
+                    Adresse
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryInfo.address}
+                    onChange={(e) =>
+                      setDeliveryInfo({ ...deliveryInfo, address: e.target.value })
+                    }
+                    className="w-full border border-[#2C2C2C] bg-white px-4 py-3 font-sans text-sm text-[#2C2C2C] focus:outline-none focus:border-[#B89C7E]"
+                    placeholder="12 rue des Nymphéas"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-sans tracking-widest uppercase text-[#3A3A3A] mb-1">
+                      Code postal
+                    </label>
+                    <input
+                      type="text"
+                      value={deliveryInfo.postal}
+                      onChange={(e) =>
+                        setDeliveryInfo({ ...deliveryInfo, postal: e.target.value })
+                      }
+                      className="w-full border border-[#2C2C2C] bg-white px-4 py-3 font-sans text-sm text-[#2C2C2C] focus:outline-none focus:border-[#B89C7E]"
+                      placeholder="75001"
+                    />
                   </div>
-                  <div className="flex justify-between font-sans text-sm">
-                    <span className="text-gris-fonce">Livraison</span>
-                    <span className="text-noir-anthracite">
-                      {cart.shipping === 0 ? "Gratuite" : formatPrice(cart.shipping)}
-                    </span>
+                  <div>
+                    <label className="block text-xs font-sans tracking-widest uppercase text-[#3A3A3A] mb-1">
+                      Ville
+                    </label>
+                    <input
+                      type="text"
+                      value={deliveryInfo.city}
+                      onChange={(e) =>
+                        setDeliveryInfo({ ...deliveryInfo, city: e.target.value })
+                      }
+                      className="w-full border border-[#2C2C2C] bg-white px-4 py-3 font-sans text-sm text-[#2C2C2C] focus:outline-none focus:border-[#B89C7E]"
+                      placeholder="Paris"
+                    />
                   </div>
                 </div>
 
-                <div className="mt-4 flex justify-between border-t border-gris-fonce/10 pt-4 font-serif text-xl font-semibold">
-                  <span className="text-noir-anthracite">Total</span>
-                  <span className="text-noir-anthracite">
-                    {formatPrice(cart.total)}
+                {deliveryError && (
+                  <p className="text-sm text-red-600">{deliveryError}</p>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full bg-[#2C2C2C] text-white py-4 font-sans text-sm tracking-widest uppercase hover:bg-[#3A3A3A] transition-colors"
+                >
+                  Continuer vers le paiement →
+                </button>
+              </form>
+            )}
+
+            {/* Formulaire paiement Stripe */}
+            {step === 'payment' && clientSecret && (
+              <Elements
+                stripe={stripePromise}
+                options={{
+                  clientSecret,
+                  appearance: {
+                    theme: 'stripe',
+                    variables: {
+                      colorPrimary: '#2C2C2C',
+                      colorBackground: '#FFFFFF',
+                      colorText: '#2C2C2C',
+                      colorDanger: '#df1b41',
+                      fontFamily: 'Lato, sans-serif',
+                      borderRadius: '0px',
+                    },
+                  },
+                }}
+              >
+                <CheckoutForm deliveryInfo={deliveryInfo} />
+              </Elements>
+            )}
+
+            {step === 'payment' && !clientSecret && (
+              <div className="flex items-center justify-center py-12">
+                <p className="font-sans text-sm text-[#B89C7E] tracking-widest">
+                  Initialisation du paiement...
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Colonne droite — Récapitulatif */}
+          <div className="bg-white border border-[#2C2C2C] p-8 h-fit">
+            <h2 className="font-serif text-xl text-[#2C2C2C] uppercase tracking-widest mb-6">
+              Récapitulatif
+            </h2>
+
+            <div className="space-y-4 mb-6">
+              {cart.items.map((item) => (
+                <div key={item.id} className="flex justify-between items-start">
+                  <div>
+                    <p className="font-serif text-sm text-[#2C2C2C] uppercase tracking-wider">
+                      {item.name}
+                    </p>
+                    <p className="font-sans text-xs text-[#B89C7E] mt-0.5">
+                      Qté : {item.quantity}
+                    </p>
+                  </div>
+                  <span className="font-sans text-sm text-[#2C2C2C]">
+                    {(item.price * item.quantity).toFixed(2)} €
                   </span>
                 </div>
+              ))}
+            </div>
+
+            <div className="border-t border-[#B89C7E] pt-4 space-y-2">
+              <div className="flex justify-between font-sans text-sm text-[#3A3A3A]">
+                <span>Sous-total</span>
+                <span>{cart.subtotal.toFixed(2)} €</span>
+              </div>
+              <div className="flex justify-between font-sans text-sm text-[#3A3A3A]">
+                <span>Livraison</span>
+                <span>
+                  {cart.shipping === 0 ? (
+                    <span className="text-[#B89C7E]">Offerte</span>
+                  ) : (
+                    `${cart.shipping.toFixed(2)} €`
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between font-serif text-lg text-[#2C2C2C] pt-2 border-t border-[#2C2C2C]">
+                <span>Total</span>
+                <span>{cart.total.toFixed(2)} €</span>
               </div>
             </div>
+
+            {cart.shipping > 0 && (
+              <p className="font-sans text-xs text-[#B89C7E] mt-4 text-center">
+                Plus que {(50 - cart.subtotal).toFixed(2)} € pour la livraison offerte
+              </p>
+            )}
           </div>
         </div>
-      </main>
-
-      <Footer />
+      </div>
     </div>
-  );
+  )
 }
